@@ -4,14 +4,33 @@ import pandas_ta as ta
 import asyncio
 import matplotlib.pyplot as plt
 import io
+import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 # === 🔑 BOT TOKENINIZI BURAYA YAZIN ===
-TELEGRAM_TOKEN = "8979697311:AAHAT1x9N9DbWUq9mvnzIqvajmpob0KOVRk"
+TELEGRAM_TOKEN = "BURAYA_BOTFATHERDAN_ALDIGIN_TOKENI_YAZ"
 
 # Aktif alarmları hafızada tutmak için bir sözlük
 ALARMLAR = {}
+
+# --- 🛰️ RENDER'IN BOTU UYUTMAMASI İÇİN WEB SUNUCUSU ---
+# Render, uygulamaya sürekli web istekleri göndererek açık kalmasını sağlar.
+class CanliTutucuServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(bytes("Bot aktif ve 7/24 calisiyor!", "utf-8"))
+
+def web_sunucu_baslat():
+    # Render'ın otomatik olarak atadığı PORT'u yakalıyoruz (Yoksa 8080 kullanır)
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), CanliTutucuServer)
+    print(f"🛰️ Canlı tutucu web sunucusu {port} portunda başlatıldı.")
+    server.serve_forever()
 
 # --- 1. Teknik Analiz ve Grafik Oluşturma Motoru ---
 def analiz_ve_grafik_uret(coin_sembol):
@@ -100,7 +119,6 @@ async def metin_yakalayici(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if mesaj.startswith('/'):
         return
 
-    # Bekleyen alarm kontrolü
     bekleyen_coin = context.user_data.get('alarm_bekleyen_coin')
     
     if bekleyen_coin:
@@ -140,7 +158,6 @@ async def metin_yakalayici(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.pop('alarm_bekleyen_coin', None)
             return
 
-    # Normal coin analizi
     coin_adi = mesaj.upper()
     veriler = analiz_ve_grafik_uret(coin_adi)
     if not veriler:
@@ -303,6 +320,12 @@ async def alarm_kontrol_dongusu(app: Application):
         await asyncio.sleep(10)
 
 def main():
+    # --- RENDER'I UYANIK TUTMAK İÇİN SİHİRLİ DOKUNUŞ ---
+    # Web sunucusunu ana bot akışını engellememesi için ayrı bir "Thread" olarak başlatıyoruz.
+    web_ thread = threading.Thread(target=web_sunucu_baslat, daemon=True)
+    web_thread.start()
+    # --------------------------------------------------
+
     print("🤖 Akıllı Karar Destek Botu Ayaklanıyor... Tüm sistemler aktif!")
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     
