@@ -1,6 +1,5 @@
 import ccxt
 import pandas as pd
-import pandas_ta as ta
 import asyncio
 import matplotlib.pyplot as plt
 import io
@@ -11,13 +10,12 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 # === 🔑 BOT TOKENINIZI BURAYA YAZIN ===
-TELEGRAM_TOKEN = "BURAYA_BOTFATHERDAN_ALDIGIN_TOKENI_YAZ"
+TELEGRAM_TOKEN = "8979697311:AAHAT1x9N9DbWUq9mvnzIqvajmpob0KOVRk"
 
 # Aktif alarmları hafızada tutmak için bir sözlük
 ALARMLAR = {}
 
 # --- 🛰️ RENDER'IN BOTU UYUTMAMASI İÇİN WEB SUNUCUSU ---
-# Render, uygulamaya sürekli web istekleri göndererek açık kalmasını sağlar.
 class CanliTutucuServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -26,11 +24,25 @@ class CanliTutucuServer(BaseHTTPRequestHandler):
         self.wfile.write(bytes("Bot aktif ve 7/24 calisiyor!", "utf-8"))
 
 def web_sunucu_baslat():
-    # Render'ın otomatik olarak atadığı PORT'u yakalıyoruz (Yoksa 8080 kullanır)
     port = int(os.environ.get("PORT", 8080))
     server = HTTPServer(("0.0.0.0", port), CanliTutucuServer)
     print(f"🛰️ Canlı tutucu web sunucusu {port} portunda başlatıldı.")
     server.serve_forever()
+
+# --- 🧪 SAF PANDAS İLE İNDİKATÖR HESAPLAMA MOTORU (KÜTÜPHANESİZ) ---
+def rsi_hesapla(series, period=14):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+def macd_hesapla(series, fast=12, slow=26, signal=9):
+    fast_ema = series.ewm(span=fast, adjust=False).mean()
+    slow_ema = series.ewm(span=slow, adjust=False).mean()
+    macd_line = fast_ema - slow_ema
+    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+    return macd_line, signal_line
 
 # --- 1. Teknik Analiz ve Grafik Oluşturma Motoru ---
 def analiz_ve_grafik_uret(coin_sembol):
@@ -53,17 +65,15 @@ def analiz_ve_grafik_uret(coin_sembol):
         df = pd.DataFrame(mumlar, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
         
-        # Teknik İndikatörler
-        df['RSI'] = ta.rsi(df['close'], length=14)
-        macd_df = ta.macd(df['close'], fast=12, slow=26, signal=9)
-        df['MACD'] = macd_df.iloc[:, 0]
-        df['MACD_Sinyal'] = macd_df.iloc[:, 1]
+        # Matematiksel Hesaplamaları Enjekte Ediyoruz
+        df['RSI'] = rsi_hesapla(df['close'], period=14)
+        df['MACD'], df['MACD_Sinyal'] = macd_command = macd_hesapla(df['close'])
         
         df['MA20'] = df['close'].rolling(window=20).mean()
         df['STD20'] = df['close'].rolling(window=20).std()
         df['BB_Ust'] = df['MA20'] + (df['STD20'] * 2)
         df['BB_Alt'] = df['MA20'] - (df['STD20'] * 2)
-        df['SMA_200'] = ta.sma(df['close'], length=200)
+        df['SMA_200'] = df['close'].rolling(window=200).mean()
         
         df_grafik = df.iloc[-100:]
         
@@ -291,7 +301,7 @@ async def buton_tıklama_kontrolu(update: Update, context: ContextTypes.DEFAULT_
     
     await query.message.reply_photo(photo=veriler['grafik_bytes'], caption=rapor, reply_markup=reply_markup, parse_mode="Markdown")
 
-# --- 4. Arka Plan Alarm İzleme Motoru ---
+# --- 3. Arka Plan Alarm İzleme Motoru ---
 async def alarm_kontrol_dongusu(app: Application):
     borsa = ccxt.binance()
     while True:
@@ -320,11 +330,8 @@ async def alarm_kontrol_dongusu(app: Application):
         await asyncio.sleep(10)
 
 def main():
-    # --- RENDER'I UYANIK TUTMAK İÇİN SİHİRLİ DOKUNUŞ ---
-    # Web sunucusunu ana bot akışını engellememesi için ayrı bir "Thread" olarak başlatıyoruz.
-    web_ thread = threading.Thread(target=web_sunucu_baslat, daemon=True)
+    web_thread = threading.Thread(target=web_sunucu_baslat, daemon=True)
     web_thread.start()
-    # --------------------------------------------------
 
     print("🤖 Akıllı Karar Destek Botu Ayaklanıyor... Tüm sistemler aktif!")
     app = Application.builder().token(TELEGRAM_TOKEN).build()
