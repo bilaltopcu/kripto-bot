@@ -1,5 +1,6 @@
 ccxt
-pandas
-pandas-ta
-python-telegram-bot
-matplotlib
+pandas==2.2.3
+numpy==1.26.4
+pandas-ta==0.3.14b0
+python-telegram-bot==21.3
+matplotlib==3.9.0
