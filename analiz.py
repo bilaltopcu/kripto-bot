@@ -1,7 +1,7 @@
 import os
-# --- 🖥️ HEADLESS SERVER İÇİN GRAFİK MOTORU AYARI (EN BAŞTA OLMALI) ---
+# --- 🖥️ HEADLESS SERVER İÇİN GRAFİK MOTORU AYARI ---
 import matplotlib
-matplotlib.use('Agg')  # Render gibi sunucularda arayüzü kapatıyoruz.
+matplotlib.use('Agg')  
 import matplotlib.pyplot as plt
 
 import ccxt
@@ -78,7 +78,6 @@ def analiz_ve_grafik_uret(coin_sembol):
         df = pd.DataFrame(mumlar, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
         
-        # Matematiksel Hesaplamalar (Sıralama Hatası Giderildi)
         df['RSI'] = rsi_hesapla(df['close'], period=14)
         df['MACD'], df['MACD_Sinyal'] = macd_hesapla(df['close'])
         
@@ -237,4 +236,138 @@ async def buton_tıklama_kontrolu(update: Update, context: ContextTypes.DEFAULT_
         return
         
     df = veriler['df']
-    anlik_fiyat = veriler['anlik
+    anlik_fiyat = veriler['anlik_fiyat']
+    guncel_rsi = df['RSI'].iloc[-1]
+    destek_seviyesi = df['BB_Alt'].iloc[-1]
+    direnc_seviyesi = df['BB_Ust'].iloc[-1]
+    guncel_sma200 = df['SMA_200'].iloc[-1]
+    
+    ortak_analiz = (
+        f"📊 *{veriler['sembol']} ANALİZ RAPORU*\n"
+        f"----------------------------------------\n"
+        f"💰 *Fiyat:* ${anlik_fiyat:.6f} | %{veriler['fiyat_degisim']:+.2f}\n"
+        f"📉 *RSI (14):* {guncel_rsi:.2f}\n"
+        f"🛡️ *Dinamik Destek:* ${destek_seviyesi:.6f}\n"
+        f"🚀 *Dinamik Direnç:* ${direnc_seviyesi:.6f}\n"
+        f"----------------------------------------\n"
+    )
+    
+    if islem_tipi == 'spot':
+        kisa_vade = "🟢 ALIŞ" if guncel_rsi < 40 else "🔴 SATIŞ" if guncel_rsi > 65 else "🟡 BEKLE"
+        orta_vade = "🟢 ALIŞ" if anlik_fiyat <= destek_seviyesi * 1.02 else "🔴 SATIŞ" if anlik_fiyat >= direnc_seviyesi * 0.98 else "🟡 BEKLE"
+        
+        if pd.isna(guncel_sma200) or guncel_sma200 is None:
+            uzun_vade = "🟡 BEKLE (Yetersiz Geçmiş Veri)"
+        else:
+            uzun_vade = "🟢 ALIŞ (Yükseliş Trendi)" if anlik_fiyat > guncel_sma200 else "🔴 SATIŞ (Baskı Var)"
+        
+        sl = anlik_fiyat * 0.95
+        tp1 = anlik_fiyat * 1.08
+        tp2 = anlik_fiyat * 1.15
+        
+        rapor = (
+            f"{ortak_analiz}"
+            f"⏱️ *Kısa Vade (1-3 G):* {kisa_vade}\n"
+            f"📅 *Orta Vade (1-3 H):* {orta_vade}\n"
+            f"⏳ *Uzun Vade (1-3 Ay):* {uzun_vade}\n\n"
+            f"🎯 *ÖNERİLEN SPOT YATIRIM SEVİYELERİ:*\n"
+            f"🟢 *Giriş Bölgesi:* Market fiyatından kademeli\n"
+            f"🚨 *Stop-Loss (SL):* ${sl:.6f} (-5%)\n"
+            f"🎯 *Hedef 1 (TP1):* ${tp1:.6f} (+8%)\n"
+            f"🎯 *Hedef 2 (TP2):* ${tp2:.6f} (+15%)\n"
+            f"----------------------------------------\n"
+            f"⚠️ _Spot piyasada sabır her zaman kazandırır._"
+        )
+    else:
+        if guncel_rsi < 35:
+            yon = "🟢 LONG (Aşırı Satım & Tepki Beklentisi)"
+            sl = anlik_fiyat * 0.98
+            tp = anlik_fiyat * 1.05
+            strateji = "Desteğe yakın bölgeden giriş."
+        elif guncel_rsi > 65:
+            yon = "🔴 SHORT (Aşırı Alım & Reddedilme)"
+            sl = anlik_fiyat * 1.02
+            tp = anlik_fiyat * 0.95
+            strateji = "Dirençten sekme beklentisiyle giriş."
+        else:
+            yon = "🟡 NÖTR (Güvenli Alan Yok, İşlem Açmayın)"
+            sl, tp = 0, 0
+            strateji = "Sinyal oluşması bekleniyor."
+            
+        rapor = (
+            f"{ortak_analiz}"
+            f"🎯 *ÖNERİLEN KALDIRAÇ YÖNÜ:*\n"
+            f"👉 *{yon}*\n\n"
+            f"📝 *Strateji:* {strateji}\n"
+        )
+        if yon != "🟡 NÖTR (Güvenli Alan Yok, İşlem Açmayın)":
+            rapor += (
+                f"🚨 *Önerilen Stop-Loss (SL):* ${sl:.6f} (%2)\n"
+                f"🎯 *Önerilen Kar Al (TP):* ${tp:.6f} (%5)\n"
+            )
+        rapor += (
+            f"----------------------------------------\n"
+            f"⚠️ *FUTURES RISK UYARISI:* Kaldıraçlı işlemler çok yüksek risk barındırır. "
+            f"Düşük kaldıraç (3x-5x) kullanılması şiddetle önerilir."
+        )
+        
+    alarm_keyboard = [
+        [InlineKeyboardButton("🔔 BU COIN İÇİN ALARM KUR", callback_data='alarm_istegi')]
+    ]
+    reply_markup = InlineKeyboardMarkup(alarm_keyboard)
+    
+    await query.message.reply_photo(photo=veriler['grafik_bytes'], caption=rapor, reply_markup=reply_markup, parse_mode="Markdown")
+
+# --- 3. Arka Plan Alarm İzleme Motoru ---
+async def alarm_kontrol_dongusu(app: Application):
+    borsa = ccxt.binance()
+    while True:
+        try:
+            for coin in list(ALARMLAR.keys()):
+                if not ALARMLAR[coin]:
+                    continue
+                    
+                ticker = borsa.fetch_ticker(f"{coin.upper()}/USDT")
+                guncel_fiyat = ticker['last']
+                
+                for alarm in ALARMLAR[coin][:]:
+                    tetiklendi = False
+                    if alarm['direction'] == 'above' and guncel_fiyat >= alarm['target_price']:
+                        tetiklendi = True
+                    elif alarm['direction'] == 'below' and guncel_fiyat <= alarm['target_price']:
+                        tetiklendi = True
+                        
+                    if tetiklendi:
+                        mesaj = f"🚨 *ALARM TETİKLENDİ!* \n\n🔔 {coin.upper()} fiyatı tam olarak beklentiniz olan *${alarm['target_price']}* seviyesine ulaştı! \n💰 Canlı fiyat: *${guncel_fiyat}*"
+                        await app.bot.send_message(chat_id=alarm['chat_id'], text=mesaj, parse_mode="Markdown")
+                        ALARMLAR[coin].remove(alarm)
+            
+        except Exception as e:
+            print(f"Alarm döngüsü hatası: {e}")
+        await asyncio.sleep(10)
+
+# --- 🚀 ASYNCIO ARKA PLAN GÖREVLERİNİN BAŞLATILMASI ---
+async def post_init(app: Application):
+    # Arka plandaki alarm kontrol döngüsünü tamamen asenkron olarak güvenli başlatıyoruz
+    asyncio.create_task(alarm_kontrol_dongusu(app))
+
+# --- 🏁 ANA BAŞLANGIÇ NOKTASI (MAIN) ---
+def main():
+    # Web sunucusunu ayrı bir kanalda ayağa kaldırıyoruz (Render canlı tutsun diye)
+    web_thread = threading.Thread(target=web_sunucu_baslat, daemon=True)
+    web_thread.start()
+
+    print("🤖 Akıllı Karar Destek Botu Ayaklanıyor... Tüm sistemler aktif!")
+    
+    # asyncio çakışmalarını tamamen ezen modern "Application" yapısı
+    app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, metin_yakalayici))
+    app.add_handler(CallbackQueryHandler(buton_tıklama_kontrolu))
+    
+    # run_polling() fonksiyonu artık kendi içinde event loop'u güvenle yönetir
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
