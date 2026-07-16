@@ -339,19 +339,24 @@ async def alarm_kontrol_dongusu(app: Application):
             print(f"Alarm döngüsü hatası: {e}")
         await asyncio.sleep(10)
 
+# --- 🚀 ASYNCIO EVENT LOOP HATASINI ÖNLEYEN SİHİRLİ DOKUNUŞ ---
+async def post_init(app: Application):
+    # Bu fonksiyon, botun ana döngüsü (loop) güvenli bir şekilde başladıktan sonra tetiklenir.
+    # Böylece "No current event loop" hatası vermeden alarm kontrol döngüsünü başlatabiliriz.
+    asyncio.create_task(alarm_kontrol_dongusu(app))
+
 def main():
     web_thread = threading.Thread(target=web_sunucu_baslat, daemon=True)
     web_thread.start()
 
     print("🤖 Akıllı Karar Destek Botu Ayaklanıyor... Tüm sistemler aktif!")
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    
+    # post_init parametresiyle asyncio krizini tamamen çözüyoruz
+    app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, metin_yakalayici))
     app.add_handler(CallbackQueryHandler(buton_tıklama_kontrolu))
-    
-    loop = asyncio.get_event_loop()
-    loop.create_task(alarm_kontrol_dongusu(app))
     
     app.run_polling()
 
