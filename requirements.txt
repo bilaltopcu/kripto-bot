@@ -1,4 +1,4 @@
 python-telegram-bot==20.8
 ccxt==4.1.80
-pandas==2.2.0
-matplotlib==3.8.2
+pandas>=2.0.0
+matplotlib>=3.8.0
