@@ -1,9 +1,13 @@
+import os
+# --- 🖥️ HEADLESS SERVER İÇİN GRAFİK MOTORU AYARI (EN BAŞTA OLMALI) ---
+import matplotlib
+matplotlib.use('Agg')  # Render gibi sunucularda hata vermemesi için arayüzü kapatıyoruz.
+import matplotlib.pyplot as plt
+
 import ccxt
 import pandas as pd
 import asyncio
-import matplotlib.pyplot as plt
 import io
-import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -29,7 +33,7 @@ def web_sunucu_baslat():
     print(f"🛰️ Canlı tutucu web sunucusu {port} portunda başlatıldı.")
     server.serve_forever()
 
-# --- 🧪 SAF PANDAS İLE İNDİKATÖR HESAPLAMA MOTORU (KÜTÜPHANESİZ) ---
+# --- 🧪 SAF PANDAS İLE İNDİKATÖR HESAPLAMA ---
 def rsi_hesapla(series, period=14):
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
@@ -65,9 +69,9 @@ def analiz_ve_grafik_uret(coin_sembol):
         df = pd.DataFrame(mumlar, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
         
-        # Matematiksel Hesaplamaları Enjekte Ediyoruz
+        # Matematiksel Hesaplamalar
         df['RSI'] = rsi_hesapla(df['close'], period=14)
-        df['MACD'], df['MACD_Sinyal'] = macd_command = macd_hesapla(df['close'])
+        df['MACD'], df['MACD_Sinyal'] = macd_hesapla(df['close'])
         
         df['MA20'] = df['close'].rolling(window=20).mean()
         df['STD20'] = df['close'].rolling(window=20).std()
@@ -78,8 +82,12 @@ def analiz_ve_grafik_uret(coin_sembol):
         df_grafik = df.iloc[-100:]
         
         # --- 📈 Grafik Çizimi ---
-        plt.style.use('dark_background')
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), gridspec_kw={'height_ratios': [2, 1]})
+        
+        # Siyah arka planı manuel ayarlıyoruz
+        fig.patch.set_facecolor('#121212')
+        ax1.set_facecolor('#121212')
+        ax2.set_facecolor('#121212')
         
         ax1.plot(df_grafik['datetime'], df_grafik['close'], label='Fiyat', color='#00F5D4', linewidth=2)
         ax1.plot(df_grafik['datetime'], df_grafik['BB_Ust'], label='Bollinger Üst', color='#FF007F', linestyle='--', alpha=0.7)
@@ -88,6 +96,7 @@ def analiz_ve_grafik_uret(coin_sembol):
         ax1.set_title(f"{sembol} - Canlı Teknik Grafik (4 Saatlik)", fontsize=14, color='white', weight='bold')
         ax1.legend(loc='upper left')
         ax1.grid(True, alpha=0.1)
+        ax1.tick_params(colors='white')
         
         ax2.plot(df_grafik['datetime'], df_grafik['RSI'], label='RSI (14)', color='#FFB703', linewidth=1.5)
         ax2.axhline(70, color='#FF007F', linestyle=':', alpha=0.8, label='Aşırı Alım (70)')
@@ -96,11 +105,12 @@ def analiz_ve_grafik_uret(coin_sembol):
         ax2.set_ylim(10, 90)
         ax2.legend(loc='upper left')
         ax2.grid(True, alpha=0.1)
+        ax2.tick_params(colors='white')
         
         plt.tight_layout()
         
         gorsel_yolu = io.BytesIO()
-        plt.savefig(gorsel_yolu, format='png', dpi=150)
+        plt.savefig(gorsel_yolu, format='png', dpi=150, facecolor=fig.get_facecolor(), edgecolor='none')
         gorsel_yolu.seek(0)
         plt.close(fig)
         
