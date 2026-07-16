@@ -1,4 +1,4 @@
 ccxt
-pandas==2.2.3
-python-telegram-bot==21.3
-matplotlib==3.9.0
+pandas
+python-telegram-bot
+matplotlib
